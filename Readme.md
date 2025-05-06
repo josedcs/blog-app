@@ -11,5 +11,6 @@ To match our current technical stack, we prefer the solution using:
 
 However, we will accept projects that use other tech stacks.
 
-### NOTE
-This project has been set up with Vue3 (Not Nuxt 3) and Nest.js with Graphql. It has a hello world graphql and REST endpoint.
+### Notes
+- This project has been set up with Vue3 (Not Nuxt 3) and Nest.js with Graphql. It has a hello world graphql and REST endpoint.
+- For the purposes of this project, please avoid Firebase and other Backend-as-a-Service tools because they abstract away too many implementation details for us to properly grade submissions.
