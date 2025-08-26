@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useMutation, useQuery } from '@vue/apollo-composable'
 import gql from 'graphql-tag'
 
@@ -42,17 +42,47 @@ const ME_QUERY = gql`
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const token = ref(localStorage.getItem('authToken') || null)
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => !!token.value && !!user.value)
 
   const { mutate: loginMutation } = useMutation(LOGIN_MUTATION)
   const { mutate: registerMutation } = useMutation(REGISTER_MUTATION)
-  const { result: meResult } = useQuery(ME_QUERY, null, () => ({
-    enabled: !!token.value
+  const { result: meResult, error: meError, refetch: refetchMe } = useQuery(ME_QUERY, null, () => ({
+    enabled: !!token.value,
+    fetchPolicy: 'cache-and-network'
   }))
+
+  // Watch for me query result and update user
+  watch(meResult, (newResult) => {
+    if (newResult?.me) {
+      user.value = newResult.me
+    }
+  }, { immediate: true })
+
+  // Watch for me query errors and clear auth if token is invalid
+  watch(meError, (error) => {
+    if (error && token.value) {
+      console.error('Auth error:', error)
+      logout()
+    }
+  })
+
+  // Initialize user data on app load if token exists
+  const initializeAuth = async () => {
+    if (token.value && !user.value) {
+      try {
+        await refetchMe()
+      } catch (error) {
+        console.error('Failed to initialize auth:', error)
+        logout()
+      }
+    }
+  }
 
   const login = async (email: string, password: string) => {
     try {
-      const result = await loginMutation({ input: { email, password } })
+      const result = await loginMutation({ 
+        input: { email, password } 
+      })
       if (result?.data?.login) {
         token.value = result.data.login.token
         user.value = result.data.login.user
@@ -84,10 +114,8 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('authToken')
   }
 
-  // Watch for me query result
-  if (meResult.value?.me) {
-    user.value = meResult.value.me
-  }
+  // Initialize auth when store is created
+  initializeAuth()
 
   return {
     user,
@@ -95,6 +123,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     register,
-    logout
+    logout,
+    initializeAuth
   }
 })

@@ -29,22 +29,27 @@
     <!-- Error state -->
     <div v-else-if="error" class="error-state">
       <p>Error loading blog posts: {{ error.message }}</p>
-      <button @click="refetch" class="retry-btn">Retry</button>
+      <button @click="() => refetch()" class="retry-btn">Retry</button>
     </div>
     
     <!-- Empty state -->
-    <div v-else-if="!posts.length" class="empty-state">
+    <div v-else-if="!allPosts.length" class="empty-state">
       <p>No blog posts yet. Be the first to create one!</p>
     </div>
     
     <!-- Posts grid -->
     <div v-else class="posts-grid">
       <div
-        v-for="(post, index) in posts"
+        v-for="(post, index) in allPosts"
         :key="post.id"
         class="post-card"
-        :class="{ 'new-post': post.isNew }"
+        :class="{ 
+          'new-post': post.isNew,
+          'my-post': post.isMyPost,
+          'unpublished': !post.published
+        }"
         :style="{ animationDelay: `${index * 0.1}s` }"
+        @click="viewPost(post.id)"
       >
         <div class="post-header">
           <h3>{{ post.title }}</h3>
@@ -55,8 +60,11 @@
         </div>
         <div class="post-footer">
           <span class="date">{{ formatDate(post.createdAt) }}</span>
-          <span v-if="post.published" class="status published">Published</span>
-          <span v-else class="status draft">Draft</span>
+          <div class="status-container">
+            <span v-if="post.published" class="status published">Published</span>
+            <span v-else class="status draft">Draft</span>
+            <span v-if="post.isMyPost && !post.published" class="status my-draft">My Draft</span>
+          </div>
         </div>
       </div>
     </div>
@@ -72,12 +80,34 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useQuery, useMutation } from '@vue/apollo-composable'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import gql from 'graphql-tag'
 import CreatePostForm from './CreatePostForm.vue'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 const GET_BLOG_POSTS = gql`
   query GetBlogPosts {
     blogPosts {
+      id
+      title
+      content
+      published
+      createdAt
+      updatedAt
+      author {
+        id
+        username
+      }
+    }
+  }
+`
+
+const GET_MY_POSTS = gql`
+  query GetMyPosts {
+    myBlogPosts {
       id
       title
       content
@@ -119,7 +149,6 @@ const getCurrentUser = () => {
   try {
     const token = localStorage.getItem('authToken')
     if (token) {
-      // Decode JWT token to get user info (basic implementation)
       const payload = JSON.parse(atob(token.split('.')[1]))
       return payload
     }
@@ -130,55 +159,83 @@ const getCurrentUser = () => {
 }
 
 // Use polling instead of subscriptions
-const { result, loading, error, refetch } = useQuery(GET_BLOG_POSTS, null, {
-  pollInterval: 3000, // Poll every 3 seconds
+const { result: publicPostsResult, loading: publicLoading, error: publicError, refetch: refetchPublic } = useQuery(GET_BLOG_POSTS, null, {
+  pollInterval: 3000,
   fetchPolicy: 'cache-and-network'
+})
+
+const { result: myPostsResult, loading: myLoading, error: myError, refetch: refetchMy } = useQuery(GET_MY_POSTS, null, {
+  pollInterval: 3000,
+  fetchPolicy: 'cache-and-network',
+  enabled: !!authStore.isAuthenticated
 })
 
 const { mutate: createPostMutation } = useMutation(CREATE_BLOG_POST)
 
-// Computed property for posts with new post detection
-const posts = computed(() => {
-  const currentPosts = result.value?.blogPosts || []
+// Computed properties
+const loading = computed(() => publicLoading.value || (authStore.isAuthenticated && myLoading.value))
+const error = computed(() => publicError.value || myError.value)
+
+const publicPosts = computed(() => publicPostsResult.value?.blogPosts || [])
+const myPosts = computed(() => myPostsResult.value?.myBlogPosts || [])
+
+// Combine and deduplicate posts
+const allPosts = computed(() => {
+  const publicPostsList = publicPosts.value
+  const myPostsList = myPosts.value
   
-  // Mark new posts
-  const postsWithNewFlag = currentPosts.map(post => ({
-    ...post,
-    isNew: !previousPosts.value.find(p => p.id === post.id)
-  }))
+  // Create a map of all posts by ID
+  const postsMap = new Map()
   
-  return postsWithNewFlag
+  // Add public posts
+  publicPostsList.forEach((post: any) => {
+    postsMap.set(post.id, {
+      ...post,
+      isMyPost: false,
+      isNew: !previousPosts.value.find((p: any) => p.id === post.id)
+    })
+  })
+  
+  // Add my posts (this will override public posts if they exist)
+  myPostsList.forEach((post: any) => {
+    postsMap.set(post.id, {
+      ...post,
+      isMyPost: true,
+      isNew: !previousPosts.value.find((p: any) => p.id === post.id)
+    })
+  })
+  
+  // Convert map back to array and sort by creation date
+  return Array.from(postsMap.values()).sort((a: any, b: any) => 
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
 })
 
 // Watch for new posts and show notifications
-watch(posts, (newPosts, oldPosts) => {
+watch(allPosts, (newPosts, oldPosts) => {
   if (oldPosts && oldPosts.length > 0) {
-    const newPostIds = newPosts.map(p => p.id)
-    const oldPostIds = oldPosts.map(p => p.id)
+    const newPostIds = newPosts.map((p: any) => p.id)
+    const oldPostIds = oldPosts.map((p: any) => p.id)
     
-    // Find posts that are new
-    const actualNewPosts = newPosts.filter(post => 
+    const actualNewPosts = newPosts.filter((post: any) => 
       !oldPostIds.includes(post.id) && newPostIds.includes(post.id)
     )
     
-    // Get current user if not already set
     if (!currentUser.value) {
       currentUser.value = getCurrentUser()
     }
     
-    // Show notifications only for posts by other users
-    actualNewPosts.forEach(post => {
+    actualNewPosts.forEach((post: any) => {
       const isMyPost = currentUser.value && 
         (post.author.id === currentUser.value.userId || 
          post.author.email === currentUser.value.email)
       
-      if (!isMyPost) {
+      if (!isMyPost && post.published) {
         addNotification(`New post: "${post.title}" by ${post.author.username}`)
       }
       
-      // Remove the "new" flag after 5 seconds
       setTimeout(() => {
-        const postIndex = newPosts.findIndex(p => p.id === post.id)
+        const postIndex = newPosts.findIndex((p: any) => p.id === post.id)
         if (postIndex !== -1) {
           newPosts[postIndex].isNew = false
         }
@@ -186,7 +243,6 @@ watch(posts, (newPosts, oldPosts) => {
     })
   }
   
-  // Update previous posts
   previousPosts.value = [...newPosts]
 }, { deep: true })
 
@@ -206,7 +262,6 @@ const addNotification = (message: string) => {
   }
   notifications.value.unshift(notification)
   
-  // Auto-remove notification after 8 seconds
   setTimeout(() => {
     removeNotification(notification.id)
   }, 8000)
@@ -221,28 +276,32 @@ const removeNotification = (id: number) => {
 
 const handlePostCreated = () => {
   showCreateForm.value = false
-  refetch() // Refetch posts after creating a new one
+  refetchPublic()
+  refetchMy()
 }
 
-// Expose createPost function to the form component
+const viewPost = (postId: string) => {
+  router.push(`/post/${postId}`)
+}
+
 const createPost = async (title: string, content: string) => {
   try {
     const result = await createPostMutation({ 
-      input: { title, content, published: true } 
+      input: { title, content, published: false } // Default to unpublished
     })
     
     if (result?.data?.createBlogPost) {
-      await refetch()
+      await refetchPublic()
+      await refetchMy()
       return { success: true }
     } else {
       return { success: false, error: 'Failed to create post' }
     }
-  } catch (error) {
+  } catch (error: any) {
     return { success: false, error: error.message || 'An error occurred' }
   }
 }
 
-// Make createPost available to child components
 defineExpose({ createPost })
 </script>
 
@@ -411,6 +470,7 @@ defineExpose({ createPost })
   animation: fadeInUp 0.6s ease forwards;
   opacity: 0;
   transform: translateY(20px);
+  cursor: pointer;
 }
 
 .post-card.new-post {
@@ -496,5 +556,31 @@ defineExpose({ createPost })
 .status.draft {
   background: #fff3e0;
   color: #f57c00;
+}
+
+.post-card.my-post {
+  border-left: 4px solid #667eea;
+}
+
+.post-card.unpublished {
+  opacity: 0.8;
+  background: #fafafa;
+}
+
+.post-card.unpublished:hover {
+  opacity: 1;
+  background: white;
+}
+
+.status-container {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.status.my-draft {
+  background: #e3f2fd;
+  color: #1976d2;
+  font-weight: 600;
 }
 </style>

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import LoginForm from '@/components/LoginForm.vue'
 import BlogList from '@/components/BlogList.vue'
+import PostDetail from '../components/PostDetail.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -21,6 +22,12 @@ const router = createRouter({
       name: 'blog',
       component: BlogList,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/post/:id',
+      name: 'post-detail',
+      component: PostDetail,
+      props: true
     }
   ]
 })
