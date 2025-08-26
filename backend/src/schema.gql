@@ -69,7 +69,3 @@ input UpdateBlogPostInput {
   content: String!
   published: Boolean!
 }
-
-type Subscription {
-  blogPostPublished: BlogPost!
-}
