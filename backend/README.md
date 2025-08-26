@@ -32,6 +32,12 @@
 $ npm install
 ```
 
+## Environment Setup
+
+```bash
+$ cp .env.template .env
+```
+
 ## Running the app
 
 ```bash
