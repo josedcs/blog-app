@@ -36,10 +36,6 @@ export class BlogPostResolver {
   ): Promise<BlogPost> {
     const newPost = await this.blogPostService.createBlogPost(input, user);
     
-    // Publish notification for new post if it's published
-    if (newPost.published) {
-      console.log('Publishing new blog post:', newPost.title);
-    }
     
     return newPost;
   }
@@ -53,10 +49,6 @@ export class BlogPostResolver {
   ): Promise<BlogPost> {
     const updatedPost = await this.blogPostService.updateBlogPost(id, input, user);
     
-    // Publish notification if post is published
-    if (input.published) {
-      console.log('Publishing updated blog post:', updatedPost.title);
-    }
     
     return updatedPost;
   }
