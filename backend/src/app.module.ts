@@ -2,8 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { ApolloDriver, ApolloDriverConfig } from "@nestjs/apollo";
 import { GraphQLModule } from "@nestjs/graphql";
 import { UserModule } from './user/user.module';
@@ -47,7 +45,7 @@ import { join } from 'path'
     UserModule,
     BlogPostModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [], // Removed AppController
+  providers: [], // Removed AppService
 })
 export class AppModule {}
