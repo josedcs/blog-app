@@ -2,6 +2,7 @@
 import { RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import { onMounted } from 'vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -10,6 +11,11 @@ const logout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+onMounted(() => {
+  // Initialize auth when app mounts
+  authStore.initializeAuth()
+})
 </script>
 
 <template>
@@ -18,7 +24,7 @@ const logout = () => {
       <div class="nav-content">
         <h1 class="nav-title">Blog App</h1>
         <div class="nav-user">
-          <span>Welcome, {{ authStore.user?.username }}</span>
+          <span>Welcome, {{ authStore.user?.username || 'User' }}</span>
           <button @click="logout" class="logout-btn">Logout</button>
         </div>
       </div>

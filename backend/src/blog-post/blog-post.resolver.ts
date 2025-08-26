@@ -5,13 +5,11 @@ import { BlogPost, CreateBlogPostInput, UpdateBlogPostInput } from './blog-post.
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '../user/user.model';
-import { PubSubService } from '../common/pubsub.service';
 
 @Resolver(() => BlogPost)
 export class BlogPostResolver {
   constructor(
     private blogPostService: BlogPostService,
-    private pubSubService: PubSubService,
   ) {}
 
   @Query(() => [BlogPost])
@@ -41,7 +39,6 @@ export class BlogPostResolver {
     // Publish notification for new post if it's published
     if (newPost.published) {
       console.log('Publishing new blog post:', newPost.title);
-      this.pubSubService.publish('blogPostPublished', { blogPostPublished: newPost });
     }
     
     return newPost;
@@ -59,7 +56,6 @@ export class BlogPostResolver {
     // Publish notification if post is published
     if (input.published) {
       console.log('Publishing updated blog post:', updatedPost.title);
-      this.pubSubService.publish('blogPostPublished', { blogPostPublished: updatedPost });
     }
     
     return updatedPost;
@@ -74,9 +70,4 @@ export class BlogPostResolver {
     return this.blogPostService.deleteBlogPost(id, user);
   }
 
-  @Subscription(() => BlogPost)
-  blogPostPublished() {
-    console.log('Setting up subscription for blogPostPublished');
-    return this.pubSubService.asyncIterator('blogPostPublished');
-  }
 }
